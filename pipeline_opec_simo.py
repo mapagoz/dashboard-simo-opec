@@ -29,7 +29,7 @@ truststore.inject_into_ssl()  # usa los certificados de Windows (resuelve el SSL
 BASE_URL = "https://simo.cnsc.gov.co/empleos/ofertaPublica/"
 PROCESOS_URL = "https://simo.cnsc.gov.co/convocatorias/visiblesTipo/list/"
 
-# Filtros base del endpoint principal. Deja "" para no filtrar.
+# Filtros base del endpoint principal.
 # El proceso (search_convocatoria) se asigna automaticamente en el recorrido.
 PARAMS_BASE = {
     "search_palabraClave": "",   # <-- para probar rapido pon aqui "estad"
