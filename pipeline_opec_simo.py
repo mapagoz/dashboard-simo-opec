@@ -21,9 +21,7 @@ import requests
 import pandas as pd
 import gspread
 from gspread_dataframe import set_with_dataframe
-
-import truststore
-truststore.inject_into_ssl()  # usa los certificados de Windows (resuelve el SSL de SIMO)
+import certifi
 
 # ------------------- CONFIGURACION -------------------
 BASE_URL = "https://simo.cnsc.gov.co/empleos/ofertaPublica/"
@@ -61,10 +59,26 @@ SHEET_ID = "1JpCSBemtrHtpkLoENOsEHJ8wtscOIKbAeZSREqrkXcc"
 WORKSHEET = "vacantes"
 # -----------------------------------------------------
 
+# Archivo con la cadena de certificados (certifi + intermedio de SIMO)
+CADENA_CERT = "simo-cadena.pem"
+INTERMEDIO_SIMO = "geotrust-intermedio.pem"
+
+
+def preparar_certificados() -> str:
+    """Combina los certificados raiz de certifi con el intermedio de SIMO."""
+    if not os.path.exists(CADENA_CERT):
+        with open(CADENA_CERT, "w", encoding="utf-8") as salida:
+            with open(certifi.where(), "r", encoding="utf-8") as base:
+                salida.write(base.read())
+            salida.write("\n")
+            with open(INTERMEDIO_SIMO, "r", encoding="utf-8") as inter:
+                salida.write(inter.read())
+    return CADENA_CERT
+
 
 def traer_procesos() -> list:
     """Lista de procesos de seleccion visibles: [{'id':..., 'nombre':...}, ...]."""
-    resp = requests.get(PROCESOS_URL, params={"nombre": "*"}, headers=HEADERS, timeout=30)
+    resp = requests.get(PROCESOS_URL, params={"nombre": "*"}, headers=HEADERS, timeout=30, verify=preparar_certificados())
     resp.raise_for_status()
     data = resp.json()
     unicos = {}  # dedupe por id
@@ -78,7 +92,7 @@ def traer_procesos() -> list:
 def traer_pagina(page: int, search_convocatoria) -> list:
     """La API devuelve directamente una LISTA de registros."""
     params = dict(PARAMS_BASE, page=page, search_convocatoria=search_convocatoria)
-    resp = requests.get(BASE_URL, params=params, headers=HEADERS, timeout=30)
+    resp = requests.get(BASE_URL, params=params, headers=HEADERS, timeout=30, verify=preparar_certificados())
     resp.raise_for_status()
     return resp.json()
 

@@ -1,4 +1,5 @@
 .venv/
 credentials.json
+simo-cadena.pem
 __pycache__/
 *.csv
