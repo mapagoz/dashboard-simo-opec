@@ -1,0 +1,26 @@
+name: Actualizar datos OPEC
+
+on:
+  schedule:
+    - cron: "0 10 * * 1"   # lunes a las 10:00 UTC (5:00 a.m. en Colombia)
+  workflow_dispatch:        # para ejecutarlo manualmente con un botón
+
+jobs:
+  extraer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Ejecutar el pipeline
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: python pipeline_opec_simo.py
