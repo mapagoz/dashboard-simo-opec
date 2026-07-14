@@ -16,6 +16,7 @@ Requisitos:
 import os
 import json
 import time
+import re 
 
 import requests
 import pandas as pd
@@ -92,7 +93,8 @@ def traer_procesos() -> list:
 def traer_pagina(page: int, search_convocatoria) -> list:
     """La API devuelve directamente una LISTA de registros."""
     params = dict(PARAMS_BASE, page=page, search_convocatoria=search_convocatoria)
-    resp = requests.get(BASE_URL, params=params, headers=HEADERS, timeout=30, verify=preparar_certificados())
+    resp = requests.get(BASE_URL, params=params, headers=HEADERS,
+                        timeout=30, verify=preparar_certificados())
     resp.raise_for_status()
     return resp.json()
 
@@ -183,6 +185,72 @@ def construir_dataframe(registros: list) -> pd.DataFrame:
     return pd.DataFrame(filas)
 
 
+TIPOS_EXP = [
+    ("PROFESIONAL RELACIONADA", "Profesional relacionada"),
+    ("PROFESIONAL", "Profesional"),
+    ("LABORAL", "Laboral"),
+    ("RELACIONADA", "Relacionada"),
+]
+
+
+def _limpiar_experiencia(texto):
+    """Devuelve (meses, tipo). Toma la exigencia mayor y el tipo principal."""
+    if not isinstance(texto, str) or not texto.strip():
+        return None, "Sin dato"
+    t = texto.upper()
+
+    if "NO REQUIERE" in t or "SIN EXPERIENCIA" in t:
+        return 0, "No requiere"
+
+    # todos los numeros entre parentesis -> tomamos el mayor (requisito mas alto)
+    numeros = [int(n) for n in re.findall(r"\((\d+)\)", texto)]
+    if not numeros:  # respaldo: cualquier numero suelto
+        numeros = [int(n) for n in re.findall(r"\b(\d+)\b", texto)]
+    meses = max(numeros) if numeros else None
+    if meses is not None and "AÑO" in t:
+        meses *= 12
+
+    # tipo: el primero que aparezca segun la lista (mas especifico primero)
+    tipo = "Otra"
+    for clave, etiqueta in TIPOS_EXP:
+        if clave in t:
+            tipo = etiqueta
+            break
+
+    return meses, tipo
+
+
+def _rango_experiencia(meses):
+    if meses is None:
+        return "Sin dato"
+    if meses == 0:
+        return "Sin experiencia"
+    if meses <= 12:
+        return "1-12 meses"
+    if meses <= 24:
+        return "13-24 meses"
+    if meses <= 36:
+        return "25-36 meses"
+    return "Más de 36 meses"
+
+
+def enriquecer(df):
+    """Agrega columnas derivadas para los filtros del dashboard."""
+    exp = df["requisito_experiencia"].apply(_limpiar_experiencia)
+    df["experiencia_meses"] = exp.apply(lambda par: par[0])
+    df["experiencia_tipo"] = exp.apply(lambda par: par[1])
+    df["experiencia_rango"] = df["experiencia_meses"].apply(_rango_experiencia)
+    df["vacantes_opec_total"] = df.groupby("opec_empleo_id")["cantidad_vacantes"].transform("sum")
+
+    # aviso: cuantas filas quedaron sin clasificar bien
+    n_otra = (df["experiencia_tipo"] == "Otra").sum()
+    n_sindato = (df["experiencia_rango"] == "Sin dato").sum()
+    if n_otra or n_sindato:
+        print(f"AVISO experiencia -> tipo 'Otra': {n_otra} filas | 'Sin dato': {n_sindato} filas")
+
+    return df
+
+
 def cliente_gspread() -> gspread.Client:
     cred_env = os.environ.get("GOOGLE_CREDENTIALS")
     if cred_env:  # automatizado (GitHub Actions): JSON en variable de entorno
@@ -208,6 +276,7 @@ def main() -> None:
         print("No se recibieron registros. Revisa filtros o encabezados.")
         return
     df = construir_dataframe(registros)
+    df = enriquecer(df) 
     print(f"Filas finales (una por vacante): {len(df)}")
     print("Columnas:", list(df.columns))
     subir_a_sheets(df)
