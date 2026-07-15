@@ -248,6 +248,15 @@ def enriquecer(df):
     if n_otra or n_sindato:
         print(f"AVISO experiencia -> tipo 'Otra': {n_otra} filas | 'Sin dato': {n_sindato} filas")
 
+    # columna normalizada para buscar (minusculas y sin basura)
+    df["estudio_busqueda"] = (
+        df["requisito_estudio"].fillna("").astype(str)
+        .str.replace("<br/>", " ", regex=False)
+        .str.replace(r"\s+", " ", regex=True)
+        .str.strip()
+        .str.lower()
+    )    
+
     return df
 
 
